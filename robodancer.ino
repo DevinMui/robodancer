@@ -1,6 +1,15 @@
 #include <Adafruit_Arcada.h>
 #include <PDM.h>
+#include <Servo.h>
 #include <CircularBuffer.h>
+
+//Servo stuff
+const int SERVO_PIN0 = 0;
+const int SERVO_PIN1 = 1;
+Servo myservo;  // create servo object to control a servo
+Servo myservo2;  // create servo object to control a servo
+int servo_pos = 0;    // variable to store the servo position
+#define DELAY_PER_SERVO 15
 
 // Color definitions
 #define BACKGROUND_COLOR __builtin_bswap16(ARCADA_BLACK)
@@ -30,6 +39,8 @@ extern PDMClass PDM;
 Adafruit_Arcada arcada;
 
 void setup() {
+  myservo.attach(SERVO_PIN0);
+  myservo2.attach(SERVO_PIN1);
   Serial.begin(115200);
   Serial.print("Hello! Arcada Plotter");
 
@@ -56,13 +67,18 @@ void setup() {
 }
 
 uint32_t timestamp = 0;
+uint32_t servo_time = 0;
 void loop() {
   if (millis() - timestamp < DELAY_PER_SAMPLE) {
     return;
   }
+ 
   uint32_t pdm_vol = getPDMwave(256);
   timestamp = millis();
   int reading = pdm_vol;
+  Serial.print("reading:" + String(reading));
+  //servo_pos = map(reading, 0, 500, 0, 180); //crazy
+  servoSweep(millis(), servo_time, 1, map(reading, 30, 300, 0, 10));
   data_buffer.push(reading);
   plotBuffer(arcada.getCanvas(), data_buffer, "Analog Input");
   arcada.blitFrameBuffer(0, 0, false, true);
@@ -73,6 +89,33 @@ void loop() {
 
 /**********************************************************************************/
 
+
+// sweep servo back and forth without blocking
+// example: 
+// servoSweep(millis(), servo_time, 10, 1);
+void servoSweep(int cur_time, uint32_t& servo_time, int delay_ms, int step_size)
+{
+  static int servo_fwd = true;
+   if (cur_time - servo_time >= delay_ms) {
+    if (servo_pos < 0) {
+      servo_fwd = true;
+      servo_pos = 0;
+    }
+    if (servo_pos > 180) {
+      servo_fwd = false;
+      servo_pos = 180;
+    }
+    if (servo_fwd) {
+      servo_pos += step_size;
+    }
+    else {
+      servo_pos -= step_size;
+    }
+    myservo.write(servo_pos);
+    myservo2.write(servo_pos);
+    servo_time = millis();
+  }
+}
 
 void plotBuffer(GFXcanvas16 *_canvas, CircularBuffer<float, PLOT_W> &buffer, char *title) {
   _canvas->fillScreen(BACKGROUND_COLOR);
